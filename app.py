@@ -77,7 +77,9 @@ SCOPES = [
 ]
 
 
-def create_oauth_flow(redirect_uri='flow.redirect_uri = request.url_root.rstrip("/") + "/oauth2callback"'):
+def create_oauth_flow(redirect_uri='flow = create_oauth_flow(
+    redirect_uri=request.url_root.rstrip("/") + "/oauth2callback"
+)'):
     """Create a google_auth_oauthlib.flow.Flow using environment variables.
 
     Priority: use `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` environment
@@ -247,7 +249,9 @@ def index():
     """Render page or handle OAuth redirected auth code callback"""
     if 'code' in request.args:
         try:
-            flow = create_oauth_flow('flow.redirect_uri = request.url_root.rstrip("/") + "/oauth2callback"')
+            flow = create_oauth_flow('flow = create_oauth_flow(
+    redirect_uri=request.url_root.rstrip("/") + "/oauth2callback"
+)')
             flow.fetch_token(authorization_response=request.url)
             session['credentials'] = credentials_to_dict(flow.credentials)
             return redirect(url_for('index'))
@@ -305,7 +309,9 @@ def get_indexing_status():
 @app.route('/login')
 def login():
     """Start Google Drive OAuth flow"""
-    flow = create_oauth_flow('flow.redirect_uri = request.url_root.rstrip("/") + "/oauth2callback"')
+    flow = create_oauth_flow('flow = create_oauth_flow(
+    redirect_uri=request.url_root.rstrip("/") + "/oauth2callback"
+)')
     authorization_url, state = flow.authorization_url(
         access_type='offline',
         include_granted_scopes='true',
