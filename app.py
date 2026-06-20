@@ -304,6 +304,10 @@ def login():
         prompt='consent'
     )
     session['state'] = state
+    # Preserve PKCE code_verifier for token exchange in the callback
+    code_verifier = getattr(flow, 'code_verifier', None)
+    if code_verifier:
+        session['code_verifier'] = code_verifier
     return redirect(authorization_url)
 
 
@@ -312,8 +316,14 @@ def oauth2callback():
     """OAuth2 callback handler."""
     try:
         flow = create_oauth_flow(redirect_uri=request.url_root.rstrip("/") + "/oauth2callback")
+        # Restore PKCE code_verifier saved during /login
+        code_verifier = session.get('code_verifier')
+        if code_verifier:
+            flow.code_verifier = code_verifier
         flow.fetch_token(authorization_response=request.url)
         session['credentials'] = credentials_to_dict(flow.credentials)
+        # Clean up verifier from session
+        session.pop('code_verifier', None)
         return redirect(url_for('index'))
     except Exception as e:
         print(f"Callback authentication failure: {e}")
