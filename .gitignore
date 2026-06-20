@@ -1,0 +1,10 @@
+.env
+client_secrets.json
+credentials.json
+token.json
+**pycache**/
+__pycache__/
+backup_*/
+*.db
+*.sqlite
+embedded_files/

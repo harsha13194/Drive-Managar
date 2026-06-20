@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: drive-manager
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: GOOGLE_CLIENT_ID
+      - key: GOOGLE_CLIENT_SECRET
+      - key: NVIDIA_API_KEY
+      - key: FLASK_SECRET_KEY
