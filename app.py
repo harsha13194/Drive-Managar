@@ -105,48 +105,21 @@ def create_oauth_flow(redirect_uri=None):
 
     raise RuntimeError('Google OAuth client configuration missing. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.')
 
-def get_email_from_id_token(id_token):
-    """Decode Google ID token locally to extract email (offline check)"""
-    if not id_token:
-        return None
-    try:
-        import base64
-        import json
-        parts = id_token.split('.')
-        if len(parts) >= 2:
-            payload = parts[1]
-            # Add padding
-            payload += '=' * (-len(payload) % 4)
-            decoded = base64.b64decode(payload).decode('utf-8')
-            data = json.loads(decoded)
-            return data.get('email')
-    except Exception as e:
-        logger.error(f"Error decoding id_token: {e}")
-    return None
-
 def credentials_to_dict(credentials):
-    """Serialize credentials object to dictionary for session storage"""
+    """Serialize credentials object to dictionary for session storage (optimized for size)"""
     return {
         'token': credentials.token,
         'refresh_token': credentials.refresh_token,
-        'token_uri': credentials.token_uri,
-        'client_id': credentials.client_id,
-        'client_secret': credentials.client_secret,
-        'scopes': credentials.scopes,
-        'id_token': getattr(credentials, 'id_token', None)
+        'scopes': credentials.scopes
     }
 
 def login_user(credentials):
     """Establish a new user session by fetching their email, clearing old session state,
     and storing the new credentials and email.
     """
-    # Try to resolve email offline from id_token first
-    user_email = get_email_from_id_token(getattr(credentials, 'id_token', None))
-    if not user_email:
-        # Fallback to fetching over the network
-        service = build('drive', 'v3', credentials=credentials, static_discovery=True)
-        user_email = get_user_email(service)
-        
+    service = build('drive', 'v3', credentials=credentials, static_discovery=True)
+    user_email = get_user_email(service)
+    
     # Completely clear the session before storing the new user's state to prevent leaks
     session.clear()
     session['credentials'] = credentials_to_dict(credentials)
@@ -161,13 +134,28 @@ def get_credentials():
     user_email = session.get('user_email')
     if not user_email or user_email == 'default_user':
         return None
-    return google.oauth2.credentials.Credentials(**session['credentials'])
+        
+    creds_dict = session['credentials'].copy()
+    creds_dict['token_uri'] = "https://oauth2.googleapis.com/token"
+    creds_dict['client_id'] = os.environ.get('GOOGLE_CLIENT_ID')
+    creds_dict['client_secret'] = os.environ.get('GOOGLE_CLIENT_SECRET')
+    
+    if not creds_dict['client_id'] or not creds_dict['client_secret']:
+        # Fallback to client_secrets.json if env vars are missing
+        if os.path.exists('client_secrets.json'):
+            try:
+                with open('client_secrets.json', 'r') as f:
+                    data = json.load(f)
+                    web_config = data.get('web', {})
+                    creds_dict['client_id'] = web_config.get('client_id')
+                    creds_dict['client_secret'] = web_config.get('client_secret')
+            except Exception:
+                pass
+                
+    return google.oauth2.credentials.Credentials(**creds_dict)
 
 def get_drive_service():
     """Build and return an authorized Drive Service client"""
-    if hasattr(g, 'drive_service'):
-        return g.drive_service
-
     creds = get_credentials()
     if not creds:
         return None
@@ -182,29 +170,7 @@ def get_drive_service():
             logger.error(f"Error refreshing Google OAuth token: {e}")
             return None
             
-    # Verify that the token corresponds to the session's user_email
-    try:
-        session_email = session.get('user_email')
-        # Try offline verification first to avoid API rate limits
-        token_email = get_email_from_id_token(session['credentials'].get('id_token'))
-        
-        # If offline fails, fall back to Google Drive API call
-        if not token_email:
-            service = build('drive', 'v3', credentials=creds, static_discovery=True)
-            token_email = get_user_email(service)
-            
-        if not session_email:
-            session['user_email'] = token_email
-        elif session_email != token_email:
-            logger.warning(f"Session email mismatch: session={session_email}, token={token_email}. Wiping session.")
-            session.clear()
-            return None
-    except Exception as e:
-        logger.error(f"Failed to validate user email: {e}")
-        return None
-        
-    g.drive_service = build('drive', 'v3', credentials=creds, static_discovery=True)
-    return g.drive_service
+    return build('drive', 'v3', credentials=creds, static_discovery=True)
 
 def map_drive_file(f):
     """Helper to transform Google Drive API file details into standard App format"""
@@ -1813,10 +1779,8 @@ def process_single_file_job(user_email, file_id, file_name, mime_type, creds_dic
     
     try:
         creds = google.oauth2.credentials.Credentials(**creds_dict)
-        token_email = get_email_from_id_token(creds_dict.get('id_token'))
-        service = build('drive', 'v3', credentials=creds, static_discovery=True)
-        if not token_email:
-            token_email = get_user_email(service)
+        service = build('drive', 'v3', credentials=creds)
+        token_email = get_user_email(service)
         if token_email != user_email:
             raise ValueError(f"Mismatched credentials for background file processing: {token_email} vs {user_email}")
         
@@ -1954,10 +1918,8 @@ def run_background_indexing(credentials_dict, user_email, keys_dict):
 
     try:
         creds = google.oauth2.credentials.Credentials(**credentials_dict)
-        token_email = get_email_from_id_token(credentials_dict.get('id_token'))
-        service = build('drive', 'v3', credentials=creds, static_discovery=True)
-        if not token_email:
-            token_email = get_user_email(service)
+        service = build('drive', 'v3', credentials=creds)
+        token_email = get_user_email(service)
         if token_email != user_email:
             raise ValueError(f"Mismatched credentials for background indexing: {token_email} vs {user_email}")
         
@@ -3127,8 +3089,8 @@ def ai_chat():
                 logger.exception("Document Analysis Failure")
                 return jsonify({
                     "success": True,
-                    "response": "Sorry, I couldn't understand your request. Please rephrase your question and try again.",
-                    "history": get_updated_history("assistant", "Sorry, I couldn't understand your request. Please rephrase your question and try again.")
+                    "response": "AI service is temporarily unavailable.",
+                    "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
                 })
                 
         # Route 3: Document Q&A
@@ -3243,8 +3205,8 @@ def ai_chat():
                 logger.exception("LLM Failure")
                 return jsonify({
                     "success": True,
-                    "response": "Sorry, I couldn't understand your request. Please rephrase your question and try again.",
-                    "history": get_updated_history("assistant", "Sorry, I couldn't understand your request. Please rephrase your question and try again.")
+                    "response": "AI service is temporarily unavailable.",
+                    "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
                 })
                 
         # Route 4: General AI Chat
@@ -3302,8 +3264,8 @@ def ai_chat():
                 logger.exception("LLM Failure")
                 return jsonify({
                     "success": True,
-                    "response": "Sorry, I couldn't understand your request. Please rephrase your question and try again.",
-                    "history": get_updated_history("assistant", "Sorry, I couldn't understand your request. Please rephrase your question and try again.")
+                    "response": "AI service is temporarily unavailable.",
+                    "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
                 })
                 
         # Default chatbot help message fallback
@@ -3326,7 +3288,7 @@ def ai_chat():
         logger.exception("AI Chat Fatal Error")
         return jsonify({
             "success": True,
-            "response": "Sorry, I couldn't understand your request. Please rephrase your question and try again."
+            "response": "AI service is temporarily unavailable."
         })
     
 
