@@ -105,6 +105,25 @@ def create_oauth_flow(redirect_uri=None):
 
     raise RuntimeError('Google OAuth client configuration missing. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.')
 
+def get_email_from_id_token(id_token):
+    """Decode Google ID token locally to extract email (offline check)"""
+    if not id_token:
+        return None
+    try:
+        import base64
+        import json
+        parts = id_token.split('.')
+        if len(parts) >= 2:
+            payload = parts[1]
+            # Add padding
+            payload += '=' * (-len(payload) % 4)
+            decoded = base64.b64decode(payload).decode('utf-8')
+            data = json.loads(decoded)
+            return data.get('email')
+    except Exception as e:
+        logger.error(f"Error decoding id_token: {e}")
+    return None
+
 def credentials_to_dict(credentials):
     """Serialize credentials object to dictionary for session storage"""
     return {
@@ -113,16 +132,21 @@ def credentials_to_dict(credentials):
         'token_uri': credentials.token_uri,
         'client_id': credentials.client_id,
         'client_secret': credentials.client_secret,
-        'scopes': credentials.scopes
+        'scopes': credentials.scopes,
+        'id_token': getattr(credentials, 'id_token', None)
     }
 
 def login_user(credentials):
     """Establish a new user session by fetching their email, clearing old session state,
     and storing the new credentials and email.
     """
-    service = build('drive', 'v3', credentials=credentials)
-    user_email = get_user_email(service)
-    
+    # Try to resolve email offline from id_token first
+    user_email = get_email_from_id_token(getattr(credentials, 'id_token', None))
+    if not user_email:
+        # Fallback to fetching over the network
+        service = build('drive', 'v3', credentials=credentials)
+        user_email = get_user_email(service)
+        
     # Completely clear the session before storing the new user's state to prevent leaks
     session.clear()
     session['credentials'] = credentials_to_dict(credentials)
@@ -155,23 +179,28 @@ def get_drive_service():
             logger.error(f"Error refreshing Google OAuth token: {e}")
             return None
             
-    service = build('drive', 'v3', credentials=creds)
-    
     # Verify that the token corresponds to the session's user_email
     try:
-        current_email = get_user_email(service)
         session_email = session.get('user_email')
+        # Try offline verification first to avoid API rate limits
+        token_email = get_email_from_id_token(session['credentials'].get('id_token'))
+        
+        # If offline fails, fall back to Google Drive API call
+        if not token_email:
+            service = build('drive', 'v3', credentials=creds)
+            token_email = get_user_email(service)
+            
         if not session_email:
-            session['user_email'] = current_email
-        elif session_email != current_email:
-            logger.warning(f"Session email mismatch: session={session_email}, token={current_email}. Wiping session.")
+            session['user_email'] = token_email
+        elif session_email != token_email:
+            logger.warning(f"Session email mismatch: session={session_email}, token={token_email}. Wiping session.")
             session.clear()
             return None
     except Exception as e:
         logger.error(f"Failed to validate user email: {e}")
         return None
         
-    return service
+    return build('drive', 'v3', credentials=creds)
 
 def map_drive_file(f):
     """Helper to transform Google Drive API file details into standard App format"""
@@ -1780,8 +1809,12 @@ def process_single_file_job(user_email, file_id, file_name, mime_type, creds_dic
     
     try:
         creds = google.oauth2.credentials.Credentials(**creds_dict)
-        service = build('drive', 'v3', credentials=creds)
-        token_email = get_user_email(service)
+        token_email = get_email_from_id_token(creds_dict.get('id_token'))
+        if not token_email:
+            service = build('drive', 'v3', credentials=creds)
+            token_email = get_user_email(service)
+        else:
+            service = build('drive', 'v3', credentials=creds)
         if token_email != user_email:
             raise ValueError(f"Mismatched credentials for background file processing: {token_email} vs {user_email}")
         
@@ -1919,8 +1952,12 @@ def run_background_indexing(credentials_dict, user_email, keys_dict):
 
     try:
         creds = google.oauth2.credentials.Credentials(**credentials_dict)
-        service = build('drive', 'v3', credentials=creds)
-        token_email = get_user_email(service)
+        token_email = get_email_from_id_token(credentials_dict.get('id_token'))
+        if not token_email:
+            service = build('drive', 'v3', credentials=creds)
+            token_email = get_user_email(service)
+        else:
+            service = build('drive', 'v3', credentials=creds)
         if token_email != user_email:
             raise ValueError(f"Mismatched credentials for background indexing: {token_email} vs {user_email}")
         
