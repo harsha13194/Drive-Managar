@@ -144,7 +144,7 @@ def login_user(credentials):
     user_email = get_email_from_id_token(getattr(credentials, 'id_token', None))
     if not user_email:
         # Fallback to fetching over the network
-        service = build('drive', 'v3', credentials=credentials)
+        service = build('drive', 'v3', credentials=credentials, static_discovery=True)
         user_email = get_user_email(service)
         
     # Completely clear the session before storing the new user's state to prevent leaks
@@ -165,6 +165,9 @@ def get_credentials():
 
 def get_drive_service():
     """Build and return an authorized Drive Service client"""
+    if hasattr(g, 'drive_service'):
+        return g.drive_service
+
     creds = get_credentials()
     if not creds:
         return None
@@ -187,7 +190,7 @@ def get_drive_service():
         
         # If offline fails, fall back to Google Drive API call
         if not token_email:
-            service = build('drive', 'v3', credentials=creds)
+            service = build('drive', 'v3', credentials=creds, static_discovery=True)
             token_email = get_user_email(service)
             
         if not session_email:
@@ -200,7 +203,8 @@ def get_drive_service():
         logger.error(f"Failed to validate user email: {e}")
         return None
         
-    return build('drive', 'v3', credentials=creds)
+    g.drive_service = build('drive', 'v3', credentials=creds, static_discovery=True)
+    return g.drive_service
 
 def map_drive_file(f):
     """Helper to transform Google Drive API file details into standard App format"""
@@ -1810,11 +1814,9 @@ def process_single_file_job(user_email, file_id, file_name, mime_type, creds_dic
     try:
         creds = google.oauth2.credentials.Credentials(**creds_dict)
         token_email = get_email_from_id_token(creds_dict.get('id_token'))
+        service = build('drive', 'v3', credentials=creds, static_discovery=True)
         if not token_email:
-            service = build('drive', 'v3', credentials=creds)
             token_email = get_user_email(service)
-        else:
-            service = build('drive', 'v3', credentials=creds)
         if token_email != user_email:
             raise ValueError(f"Mismatched credentials for background file processing: {token_email} vs {user_email}")
         
@@ -1953,11 +1955,9 @@ def run_background_indexing(credentials_dict, user_email, keys_dict):
     try:
         creds = google.oauth2.credentials.Credentials(**credentials_dict)
         token_email = get_email_from_id_token(credentials_dict.get('id_token'))
+        service = build('drive', 'v3', credentials=creds, static_discovery=True)
         if not token_email:
-            service = build('drive', 'v3', credentials=creds)
             token_email = get_user_email(service)
-        else:
-            service = build('drive', 'v3', credentials=creds)
         if token_email != user_email:
             raise ValueError(f"Mismatched credentials for background indexing: {token_email} vs {user_email}")
         
