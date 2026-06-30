@@ -144,14 +144,13 @@ def login_user(credentials):
     user_email = get_email_from_id_token(getattr(credentials, 'id_token', None))
     if not user_email:
         # Fallback to fetching over the network
-        service = build('drive', 'v3', credentials=credentials, static_discovery=True)
+        service = build('drive', 'v3', credentials=credentials)
         user_email = get_user_email(service)
         
     # Completely clear the session before storing the new user's state to prevent leaks
     session.clear()
     session['credentials'] = credentials_to_dict(credentials)
     session['user_email'] = user_email
-    session['email_verified'] = True
     session.modified = True
     return user_email
 
@@ -166,10 +165,6 @@ def get_credentials():
 
 def get_drive_service():
     """Build and return an authorized Drive Service client"""
-    if has_request_context():
-        if hasattr(g, 'drive_service') and g.drive_service is not None:
-            return g.drive_service
-
     creds = get_credentials()
     if not creds:
         return None
@@ -187,31 +182,25 @@ def get_drive_service():
     # Verify that the token corresponds to the session's user_email
     try:
         session_email = session.get('user_email')
-        if not session.get('email_verified'):
-            token_email = None
-            id_token = session['credentials'].get('id_token')
-            if id_token:
-                token_email = get_email_from_id_token(id_token)
-                
-            # If offline check is not possible, fall back to one-time network check
-            if not token_email:
-                service = build('drive', 'v3', credentials=creds, static_discovery=True)
-                token_email = get_user_email(service)
-                
-            if session_email != token_email:
-                logger.warning(f"Session email mismatch: session={session_email}, token={token_email}. Wiping session.")
-                session.clear()
-                return None
-                
-            session['email_verified'] = True
+        # Try offline verification first to avoid API rate limits
+        token_email = get_email_from_id_token(session['credentials'].get('id_token'))
+        
+        # If offline fails, fall back to Google Drive API call
+        if not token_email:
+            service = build('drive', 'v3', credentials=creds)
+            token_email = get_user_email(service)
+            
+        if not session_email:
+            session['user_email'] = token_email
+        elif session_email != token_email:
+            logger.warning(f"Session email mismatch: session={session_email}, token={token_email}. Wiping session.")
+            session.clear()
+            return None
     except Exception as e:
         logger.error(f"Failed to validate user email: {e}")
         return None
         
-    service = build('drive', 'v3', credentials=creds, static_discovery=True)
-    if has_request_context():
-        g.drive_service = service
-    return service
+    return build('drive', 'v3', credentials=creds)
 
 def map_drive_file(f):
     """Helper to transform Google Drive API file details into standard App format"""
@@ -521,7 +510,124 @@ def get_session_email_or_fetch(service):
         session['user_email'] = email
     return email
 
+@app.route('/api/create-folder', methods=['POST'])
+def create_folder():
+    """Create a folder on Google Drive"""
+    data = request.get_json(silent=True) or {}
+    folder_name = (data.get('name') or '').strip()
+    parent_id = data.get('parent_id', 'root')
 
+    if not folder_name:
+        return jsonify({"success": False, "error": "Folder name is required"}), 400
+
+    service = get_drive_service()
+    if not service:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    try:
+        folder_metadata = {
+            'name': folder_name,
+            'mimeType': 'application/vnd.google-apps.folder'
+        }
+        if parent_id != 'root':
+            folder_metadata['parents'] = [parent_id]
+            
+        new_folder = service.files().create(body=folder_metadata, fields='id, name, webViewLink').execute()
+        
+        # Sync update to index
+        try:
+            user_email = get_session_email_or_fetch(service)
+            parent_path = "/"
+            if parent_id != 'root':
+                index_data = load_json_file(f"drive_index_{sanitize_filename(user_email)}.json", {})
+                parent_meta = index_data.get(parent_id)
+                if parent_meta:
+                    parent_path = parent_meta["path"]
+            folder_path = (parent_path + "/" + folder_name) if parent_path != "/" else ("/" + folder_name)
+            if not folder_path.startswith("/"):
+                folder_path = "/" + folder_path
+
+            file_metadata = {
+                "id": new_folder["id"],
+                "name": folder_name,
+                "mime_type": 'application/vnd.google-apps.folder',
+                "path": folder_path,
+                "parent_id": parent_id,
+                "size": None,
+                "modified_time": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "starred": False,
+                "owner": "me",
+                "is_folder": True,
+                "webViewLink": new_folder.get("webViewLink"),
+                "webContentLink": None
+            }
+            update_index_file(user_email, new_folder["id"], file_metadata)
+        except Exception as index_err:
+            print(f"Error syncing folder creation to index: {index_err}")
+            
+        return jsonify({"success": True, "folder": new_folder})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/create-doc', methods=['POST'])
+def create_doc():
+    """Create an empty text file on Google Drive"""
+    data = request.get_json(silent=True) or {}
+    doc_name = (data.get('name') or '').strip() or 'Untitled Document'
+    parent_id = data.get('parent_id', 'root')
+    
+    if not doc_name.endswith('.txt') and '.' not in doc_name:
+        doc_name += '.txt'
+        
+    service = get_drive_service()
+    if not service:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    try:
+        file_metadata = {
+            'name': doc_name,
+            'mimeType': 'text/plain'
+        }
+        if parent_id != 'root':
+            file_metadata['parents'] = [parent_id]
+            
+        media = MediaIoBaseUpload(io.BytesIO(b''), mimetype='text/plain', resumable=True)
+        new_doc = service.files().create(body=file_metadata, media_body=media, fields='id, name, webViewLink, webContentLink').execute()
+        
+        # Sync update to index
+        try:
+            user_email = get_session_email_or_fetch(service)
+            parent_path = "/"
+            if parent_id != 'root':
+                index_data = load_json_file(f"drive_index_{sanitize_filename(user_email)}.json", {})
+                parent_meta = index_data.get(parent_id)
+                if parent_meta:
+                    parent_path = parent_meta["path"]
+            doc_path = (parent_path + "/" + doc_name) if parent_path != "/" else ("/" + doc_name)
+            if not doc_path.startswith("/"):
+                doc_path = "/" + doc_path
+
+            file_meta = {
+                "id": new_doc["id"],
+                "name": doc_name,
+                "mime_type": 'text/plain',
+                "path": doc_path,
+                "parent_id": parent_id,
+                "size": "0",
+                "modified_time": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "starred": False,
+                "owner": "me",
+                "is_folder": False,
+                "webViewLink": new_doc.get("webViewLink"),
+                "webContentLink": new_doc.get("webContentLink")
+            }
+            update_index_file(user_email, new_doc["id"], file_meta, raw_content="")
+        except Exception as index_err:
+            print(f"Error syncing document creation to index: {index_err}")
+            
+        return jsonify({"success": True, "doc": new_doc})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 def verify_file_ownership(service, user_email, file_id, index_data):
     """
@@ -1705,10 +1811,10 @@ def process_single_file_job(user_email, file_id, file_name, mime_type, creds_dic
         creds = google.oauth2.credentials.Credentials(**creds_dict)
         token_email = get_email_from_id_token(creds_dict.get('id_token'))
         if not token_email:
-            service = build('drive', 'v3', credentials=creds, static_discovery=True)
+            service = build('drive', 'v3', credentials=creds)
             token_email = get_user_email(service)
         else:
-            service = build('drive', 'v3', credentials=creds, static_discovery=True)
+            service = build('drive', 'v3', credentials=creds)
         if token_email != user_email:
             raise ValueError(f"Mismatched credentials for background file processing: {token_email} vs {user_email}")
         
@@ -1848,10 +1954,10 @@ def run_background_indexing(credentials_dict, user_email, keys_dict):
         creds = google.oauth2.credentials.Credentials(**credentials_dict)
         token_email = get_email_from_id_token(credentials_dict.get('id_token'))
         if not token_email:
-            service = build('drive', 'v3', credentials=creds, static_discovery=True)
+            service = build('drive', 'v3', credentials=creds)
             token_email = get_user_email(service)
         else:
-            service = build('drive', 'v3', credentials=creds, static_discovery=True)
+            service = build('drive', 'v3', credentials=creds)
         if token_email != user_email:
             raise ValueError(f"Mismatched credentials for background indexing: {token_email} vs {user_email}")
         
@@ -2589,7 +2695,13 @@ def classify_intent(message, api_key, provider):
     
     # 1. Fallback Heuristics first to check simple keyword matches
     # Drive Operations
-    if re.search(r'\b(delete|remove)\b', msg_lower):
+    if re.search(r'\bcreate folder\b', msg_lower) or msg_lower.startswith("create folder"):
+        detected_intent = "create folder"
+        detected_cat = "Drive Operations"
+    elif re.search(r'\b(create doc|create document|create file)\b', msg_lower):
+        detected_intent = "create file"
+        detected_cat = "Drive Operations"
+    elif re.search(r'\b(delete|remove)\b', msg_lower):
         detected_intent = "delete"
         detected_cat = "Drive Operations"
     elif re.search(r'\brename\b', msg_lower):
@@ -2713,6 +2825,8 @@ def classify_intent(message, api_key, provider):
 Analyze the user's message and classify it into exactly one category and one intent from this list:
 
 ## Drive Operations:
+- create folder
+- create file
 - delete
 - rename
 - move
@@ -2918,18 +3032,20 @@ def ai_chat():
             logger.info("Executing manual-only Drive Operations routing path")
             
             instructions = {
+                "create folder": "📁 **Create Folder**: To create a folder manually, click the **New Folder** button at the top-left of the sidebar, enter the folder name, and click **Create**.",
+                "create file": "📄 **Create Document**: To create a new document manually, click the **New Doc** button at the top-left of the sidebar, enter a name, and click **Create**. You can also upload existing files.",
                 "delete": "🗑️ **Delete File/Folder**: To delete a file or folder manually, right-click on the item in the list and select **Delete** from the context menu.",
                 "rename": "✏️ **Rename File/Folder**: To rename an item manually, right-click on the item and select **Rename** from the context menu.",
                 "move": "📂 **Move File/Folder**: To move a file or folder manually, right-click on the item, select **Move**, and select the destination folder.",
                 "copy": "📋 **Copy File**: To copy a file manually, right-click on the file and select **Make a Copy**.",
-                "upload": "📤 **Upload File**: To upload a file manually, click the **Upload File** button inside the action bar, or simply drag and drop the file into the files grid/list.",
+                "upload": "📤 **Upload File**: To upload a file manually, click the **Upload File** button at the top-left of the sidebar, or simply drag and drop the file into the files grid/list.",
                 "download": "📥 **Download File**: To download a file manually, right-click on it and select **Download**, or click the **Download** button inside the file preview.",
                 "star": "⭐ **Star File**: To star a file manually, right-click on the file and select **Star**.",
                 "unstar": "☆ **Unstar File**: To remove a star from a file manually, right-click on the file and select **Unstar**.",
                 "share": "🔗 **Share File**: To share a file manually (allowing anyone with the link to read it), right-click on the file and select **Share**."
             }
             
-            resp = instructions.get(intent, "⚠️ **Drive Operations**: The AI Assistant cannot modify your Drive files directly. Please perform file actions (uploading, deleting, renaming, moving, copying, etc.) manually using the action bar or by right-clicking on any file.")
+            resp = instructions.get(intent, "⚠️ **Drive Operations**: The AI Assistant cannot modify your Drive files directly. Please perform file actions (creating, deleting, renaming, moving, copying, etc.) manually using the buttons in the sidebar or by right-clicking on any file.")
             return jsonify({"response": resp, "history": get_updated_history("assistant", resp)})
             
         # Route 2: Document Analysis
@@ -3178,7 +3294,7 @@ def ai_chat():
                     elif "hello" in msg_lower or "hi" in msg_lower:
                         resp = "🤖 Hello! I am the Drive AI Assistant. How can I help you manage or analyze your Google Drive today?"
                     elif "help" in msg_lower:
-                        resp = "🤖 **How to use Drive AI Assistant**:\n- Ask general questions directly.\n- Analyze a document by selecting it and typing `Summarize this file`.\n- Manage files by right-clicking on any file to rename or delete."
+                        resp = "🤖 **How to use Drive AI Assistant**:\n- Ask general questions directly.\n- Analyze a document by selecting it and typing `Summarize this file`.\n- Manage folders and files by typing `Create folder Notes`."
                     else:
                         raise Exception("Empty response text from LLM service")
                     return jsonify({"response": resp, "history": get_updated_history("assistant", resp)})
@@ -3194,6 +3310,8 @@ def ai_chat():
         resp = (
             "🤖 **Drive AI Assistant**\n\n"
             "I can reason over your entire Google Drive! Ask me questions about your documents, compare files, or trigger file management commands:\n"
+            "- `create folder Projects` - Create a folder.\n"
+            "- `create doc Ideas` - Create a text document.\n"
             "- `delete report` - Resolve report and move it to trash.\n"
             "- `star notes` - Star notes file.\n"
             "- `rename document to project_plan` - Rename a file.\n\n"
