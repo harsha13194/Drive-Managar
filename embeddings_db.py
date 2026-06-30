@@ -9,6 +9,8 @@ import numpy as np
 
 # Vector database name format: drive_embeddings_{sanitized_email}.db
 def get_db_path(user_email):
+    if not user_email or user_email == 'default_user':
+        raise ValueError("Invalid user email for database access")
     sanitized = re.sub(r'[^a-zA-Z0-9_\-]', '_', user_email)
     os.makedirs('embedded_files', exist_ok=True)
     return os.path.join('embedded_files', f"drive_embeddings_{sanitized}.db")

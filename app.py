@@ -116,9 +116,26 @@ def credentials_to_dict(credentials):
         'scopes': credentials.scopes
     }
 
+def login_user(credentials):
+    """Establish a new user session by fetching their email, clearing old session state,
+    and storing the new credentials and email.
+    """
+    service = build('drive', 'v3', credentials=credentials)
+    user_email = get_user_email(service)
+    
+    # Completely clear the session before storing the new user's state to prevent leaks
+    session.clear()
+    session['credentials'] = credentials_to_dict(credentials)
+    session['user_email'] = user_email
+    session.modified = True
+    return user_email
+
 def get_credentials():
     """Retrieve credentials from Flask session"""
     if 'credentials' not in session:
+        return None
+    user_email = session.get('user_email')
+    if not user_email or user_email == 'default_user':
         return None
     return google.oauth2.credentials.Credentials(**session['credentials'])
 
@@ -135,10 +152,26 @@ def get_drive_service():
             creds.refresh(Request())
             session['credentials'] = credentials_to_dict(creds)
         except Exception as e:
-            print(f"Error refreshing Google OAuth token: {e}")
+            logger.error(f"Error refreshing Google OAuth token: {e}")
             return None
             
-    return build('drive', 'v3', credentials=creds)
+    service = build('drive', 'v3', credentials=creds)
+    
+    # Verify that the token corresponds to the session's user_email
+    try:
+        current_email = get_user_email(service)
+        session_email = session.get('user_email')
+        if not session_email:
+            session['user_email'] = current_email
+        elif session_email != current_email:
+            logger.warning(f"Session email mismatch: session={session_email}, token={current_email}. Wiping session.")
+            session.clear()
+            return None
+    except Exception as e:
+        logger.error(f"Failed to validate user email: {e}")
+        return None
+        
+    return service
 
 def map_drive_file(f):
     """Helper to transform Google Drive API file details into standard App format"""
@@ -277,6 +310,8 @@ def index():
                     ).start()
         except Exception as e:
             print(f"Error checking background indexing status: {e}")
+            session.clear()
+            authenticated = False
         
     return render_template('drive.html', authenticated=authenticated)
 
@@ -297,6 +332,7 @@ def get_indexing_status():
 @app.route('/login')
 def login():
     """Start Google Drive OAuth flow"""
+    session.clear()  # Clear existing session before creating a new login flow
     flow = create_oauth_flow(redirect_uri=request.url_root.rstrip("/") + "/oauth2callback")
     authorization_url, state = flow.authorization_url(
         access_type='offline',
@@ -321,9 +357,9 @@ def oauth2callback():
         if code_verifier:
             flow.code_verifier = code_verifier
         flow.fetch_token(authorization_response=request.url)
-        session['credentials'] = credentials_to_dict(flow.credentials)
-        # Clean up verifier from session
-        session.pop('code_verifier', None)
+        
+        # Log in the user securely
+        login_user(flow.credentials)
         return redirect(url_for('index'))
     except Exception as e:
         print(f"Callback authentication failure: {e}")
@@ -335,7 +371,9 @@ def logout():
     session.clear()
     if hasattr(g, 'user_index'):
         delattr(g, 'user_index')
-    return redirect(url_for('index'))
+    response = redirect(url_for('index'))
+    response.set_cookie('session', '', expires=0)
+    return response
 
 # ========= API ENDPOINTS (LIVE GOOGLE DRIVE) =========
 
@@ -562,7 +600,6 @@ def create_doc():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/save-doc', methods=['POST'])
 def verify_file_ownership(service, user_email, file_id, index_data):
     """
     Verify if the file_id belongs to the user by checking index_data or querying Google Drive API directly.
@@ -602,6 +639,7 @@ def verify_file_ownership(service, user_email, file_id, index_data):
         
     return False, None
 
+@app.route('/api/save-doc', methods=['POST'])
 def save_doc():
     """Overwrite text file contents on Google Drive"""
     data = request.get_json(silent=True) or {}
@@ -1297,6 +1335,8 @@ def fetch_file_text_content(service, file_id):
 # --- True Google Drive Agent Indexing & Retrieval Engine ---
 
 def sanitize_filename(name):
+    if not name or name == 'default_user':
+        raise ValueError("Invalid user email/name for file operations")
     return re.sub(r'[^a-zA-Z0-9_\-]', '_', name)
 
 def get_user_data_path(filename):
@@ -1346,12 +1386,17 @@ def restore_user_state(email):
         INDEXING_STATUS[email] = {"status": "not_started"}
 
 def get_user_email(service):
+    """Fetch user's email from Google Drive API about endpoint.
+    Raises ValueError if email cannot be fetched.
+    """
     try:
         about = service.about().get(fields="user").execute()
-        return about.get('user', {}).get('emailAddress', 'default_user')
+        email = about.get('user', {}).get('emailAddress')
+        if email and email != 'default_user':
+            return email
     except Exception as e:
-        print(f"Error fetching user email: {e}")
-        return 'default_user'
+        logger.error(f"Error fetching user email: {e}")
+    raise ValueError("Failed to retrieve user email from Google API")
 
 def extract_pdf_text(file_bytes):
     try:
@@ -1736,6 +1781,9 @@ def process_single_file_job(user_email, file_id, file_name, mime_type, creds_dic
     try:
         creds = google.oauth2.credentials.Credentials(**creds_dict)
         service = build('drive', 'v3', credentials=creds)
+        token_email = get_user_email(service)
+        if token_email != user_email:
+            raise ValueError(f"Mismatched credentials for background file processing: {token_email} vs {user_email}")
         
         text = ""
         if mime_type == 'application/vnd.google-apps.document':
@@ -1872,6 +1920,9 @@ def run_background_indexing(credentials_dict, user_email, keys_dict):
     try:
         creds = google.oauth2.credentials.Credentials(**credentials_dict)
         service = build('drive', 'v3', credentials=creds)
+        token_email = get_user_email(service)
+        if token_email != user_email:
+            raise ValueError(f"Mismatched credentials for background indexing: {token_email} vs {user_email}")
         
         # 1. Fetch flat list of all files
         all_files = []
@@ -2424,6 +2475,15 @@ def get_document_content(user_email, service, file_id):
     or pulling / parsing from Google Drive on-the-fly.
     """
     sanitized_email = sanitize_filename(user_email)
+    index_file = f"drive_index_{sanitized_email}.json"
+    index_data = load_json_file(index_file, {})
+    
+    # Enforce strict ownership check
+    has_access, file_meta = verify_file_ownership(service, user_email, file_id, index_data)
+    if not has_access:
+        logger.warning(f"Access denied to file {file_id} for user {user_email}")
+        return None
+        
     content_file = f"drive_content_cache_{sanitized_email}.json"
     content_data = load_json_file(content_file, {})
     
@@ -2440,7 +2500,11 @@ def get_document_content(user_email, service, file_id):
         chunks = chunk_text(text)
         
         # Load keys
-        nvidia_key = session.get('nvidia_api_key') or os.environ.get('NVIDIA_API_KEY') or DEFAULT_NVIDIA_API_KEY
+        nvidia_key = None
+        if has_request_context():
+            nvidia_key = session.get('nvidia_api_key')
+        if not nvidia_key:
+            nvidia_key = os.environ.get('NVIDIA_API_KEY') or DEFAULT_NVIDIA_API_KEY
         keys_dict = {'nvidia_api_key': nvidia_key}
         provider = 'nvidia'
         
@@ -2497,7 +2561,11 @@ def get_document_content(user_email, service, file_id):
     chunks = chunk_text(text)
     
     # Load keys
-    nvidia_key = session.get('nvidia_api_key') or os.environ.get('NVIDIA_API_KEY') or DEFAULT_NVIDIA_API_KEY
+    nvidia_key = None
+    if has_request_context():
+        nvidia_key = session.get('nvidia_api_key')
+    if not nvidia_key:
+        nvidia_key = os.environ.get('NVIDIA_API_KEY') or DEFAULT_NVIDIA_API_KEY
     keys_dict = {'nvidia_api_key': nvidia_key}
     provider = 'nvidia'
     

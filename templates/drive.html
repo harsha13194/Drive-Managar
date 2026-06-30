@@ -2216,6 +2216,14 @@
 
     <!-- Fullscreen OAuth Login Overlay if not authenticated -->
     {% if not authenticated %}
+    <script>
+        try {
+            localStorage.clear();
+            sessionStorage.clear();
+        } catch (e) {
+            console.error("Failed to clear client-side storage:", e);
+        }
+    </script>
     <div class="login-overlay"
         style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #0f172a, #1e293b); z-index: 10000; display: flex; align-items: center; justify-content: center;">
         <div class="login-card"
