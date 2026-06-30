@@ -2326,7 +2326,6 @@
             <!-- Action Buttons & Toolbar -->
             <div class="action-buttons" id="actionButtons">
                 <div class="btn-group">
-                    <button class="action-btn" id="newFolderBtn"><i class="fas fa-folder-plus"></i> New Folder</button>
                     <button class="action-btn primary" id="uploadBtn"><i class="fas fa-upload"></i> Upload File</button>
                 </div>
                 <div class="btn-group" id="trashActions" style="display: none;">
@@ -2356,7 +2355,21 @@
                 </div>
             </div>
 
-            
+            <!-- Files Display Area -->
+            <div class="files-area" id="filesArea">
+                <!-- Drag and drop visual indicator -->
+                <div class="drag-overlay" id="dragOverlay">
+                    <i class="fas fa-cloud-arrow-up"></i>
+                    <p>Drop files here to upload</p>
+                </div>
+
+                <div class="empty-state">
+                    <i class="fas fa-folder-open"></i>
+                    <p>No files or folders found</p>
+                    <small>Click "Upload File" to get started</small>
+                </div>
+            </div>
+        </div>
 
         <!-- AI Chat Panel Sidebar -->
         <div class="ai-chat-sidebar" id="aiChatSidebar">
@@ -2399,35 +2412,6 @@
     </div>
 
     <!-- Modals -->
-    <!-- New Folder Modal -->
-    <div id="folderModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <i class="fas fa-folder-plus"></i>
-                <h3>New Folder</h3>
-            </div>
-            <input type="text" id="folderName" placeholder="Folder name" autocomplete="off">
-            <div class="modal-buttons">
-                <button class="cancel" onclick="closeModal('folderModal')">Cancel</button>
-                <button class="confirm" onclick="createFolder()">Create</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- New Doc Modal -->
-    <div id="docModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <i class="fas fa-file-alt"></i>
-                <h3>New Document</h3>
-            </div>
-            <input type="text" id="docName" placeholder="Document name" autocomplete="off" value="Untitled">
-            <div class="modal-buttons">
-                <button class="cancel" onclick="closeModal('docModal')">Cancel</button>
-                <button class="confirm" onclick="createDocument()">Create</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Rename Modal -->
     <div id="renameModal" class="modal">
@@ -3120,52 +3104,6 @@
             }
         }
 
-        // Create folder action
-        async function createFolder() {
-            const name = document.getElementById('folderName').value.trim();
-            if (!name) {
-                showToast('Please enter a folder name', 'error');
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/create-folder', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name, parent_id: currentFolderId })
-                });
-                if (res.ok) {
-                    closeModal('folderModal');
-                    document.getElementById('folderName').value = '';
-                    fetchFiles();
-                    showToast(`Folder "${name}" created`, 'success');
-                }
-            } catch (err) {
-                showToast('Error creating folder', 'error');
-            }
-        }
-
-        // Create document action
-        async function createDocument() {
-            let name = document.getElementById('docName').value.trim();
-            if (!name) name = 'Untitled';
-
-            try {
-                const res = await fetch('/api/create-doc', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name, parent_id: currentFolderId })
-                });
-                if (res.ok) {
-                    closeModal('docModal');
-                    document.getElementById('docName').value = 'Untitled';
-                    fetchFiles();
-                    showToast(`Document "${name}" created`, 'success');
-                }
-            } catch (err) {
-                showToast('Error creating document', 'error');
-            }
-        }
 
         // Upload file
         async function uploadFile(file) {
@@ -3978,7 +3916,6 @@
         });
 
         // Control bar triggers
-        document.getElementById('newFolderBtn').onclick = () => openModal('folderModal');
         document.getElementById('uploadBtn').onclick = () => document.getElementById('fileInput').click();
         document.getElementById('emptyTrashBtn').onclick = () => emptyTrash();
 
