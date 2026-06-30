@@ -3127,8 +3127,8 @@ def ai_chat():
                 logger.exception("Document Analysis Failure")
                 return jsonify({
                     "success": True,
-                    "response": "AI service is temporarily unavailable.",
-                    "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
+                    "response": "Sorry, I couldn't understand your request. Please rephrase your question and try again.",
+                    "history": get_updated_history("assistant", "Sorry, I couldn't understand your request. Please rephrase your question and try again.")
                 })
                 
         # Route 3: Document Q&A
@@ -3243,8 +3243,8 @@ def ai_chat():
                 logger.exception("LLM Failure")
                 return jsonify({
                     "success": True,
-                    "response": "AI service is temporarily unavailable.",
-                    "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
+                    "response": "Sorry, I couldn't understand your request. Please rephrase your question and try again.",
+                    "history": get_updated_history("assistant", "Sorry, I couldn't understand your request. Please rephrase your question and try again.")
                 })
                 
         # Route 4: General AI Chat
@@ -3302,8 +3302,8 @@ def ai_chat():
                 logger.exception("LLM Failure")
                 return jsonify({
                     "success": True,
-                    "response": "AI service is temporarily unavailable.",
-                    "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
+                    "response": "Sorry, I couldn't understand your request. Please rephrase your question and try again.",
+                    "history": get_updated_history("assistant", "Sorry, I couldn't understand your request. Please rephrase your question and try again.")
                 })
                 
         # Default chatbot help message fallback
@@ -3326,7 +3326,7 @@ def ai_chat():
         logger.exception("AI Chat Fatal Error")
         return jsonify({
             "success": True,
-            "response": "AI service is temporarily unavailable."
+            "response": "Sorry, I couldn't understand your request. Please rephrase your question and try again."
         })
     
 
