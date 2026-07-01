@@ -156,6 +156,9 @@ def get_credentials():
 
 def get_drive_service():
     """Build and return an authorized Drive Service client"""
+    if has_request_context() and hasattr(g, 'drive_service'):
+        return g.drive_service
+
     creds = get_credentials()
     if not creds:
         return None
@@ -170,7 +173,10 @@ def get_drive_service():
             logger.error(f"Error refreshing Google OAuth token: {e}")
             return None
             
-    return build('drive', 'v3', credentials=creds, static_discovery=True)
+    service = build('drive', 'v3', credentials=creds, static_discovery=True)
+    if has_request_context():
+        g.drive_service = service
+    return service
 
 def map_drive_file(f):
     """Helper to transform Google Drive API file details into standard App format"""
@@ -286,13 +292,12 @@ def index():
         try:
             service = get_drive_service()
             if service:
-                user_email = get_user_email(service)
-                session['user_email'] = user_email
+                user_email = session.get('user_email')
+                if not user_email:
+                    user_email = get_user_email(service)
+                    session['user_email'] = user_email
                 
-                # Rebuild and restore user-specific state
-                load_user_cache(user_email)
-                load_user_index(user_email)
-                connect_user_vectors(user_email)
+                # Rebuild and restore user-specific state (skip redundant json parsing/db setups)
                 restore_user_state(user_email)
                 
                 status = INDEXING_STATUS.get(user_email, {}).get("status")
@@ -1251,15 +1256,24 @@ def get_storage_info():
     try:
         about = service.about().get(fields="storageQuota").execute()
         quota = about.get('storageQuota', {})
-        limit = int(quota.get('limit', 15 * 1024 * 1024 * 1024))
-        usage = int(quota.get('usage', 0))
+        
+        limit_val = quota.get('limit')
+        usage_val = quota.get('usage')
+        
+        # Convert to int safely, with fallback if limit is missing or None
+        limit = int(limit_val) if limit_val is not None else (15 * 1024 * 1024 * 1024)
+        usage = int(usage_val) if usage_val is not None else 0
         
         limit_gb = limit / (1024 * 1024 * 1024)
         usage_gb = usage / (1024 * 1024 * 1024)
         
-        user_email = session.get('user_email') or get_user_email(service)
-        if user_email:
-            session['user_email'] = user_email
+        user_email = session.get('user_email')
+        if not user_email:
+            try:
+                user_email = get_user_email(service)
+                session['user_email'] = user_email
+            except Exception:
+                user_email = ""
             
         return jsonify({
             "used_bytes": usage,
@@ -1269,6 +1283,7 @@ def get_storage_info():
             "email": user_email or ""
         })
     except Exception as e:
+        logger.exception("Error in get_storage_info")
         return jsonify({"error": str(e)}), 500
 
 # ========= DRIVE AI ASSISTANT ENDPOINTS & TOOLS =========
@@ -1779,7 +1794,7 @@ def process_single_file_job(user_email, file_id, file_name, mime_type, creds_dic
     
     try:
         creds = google.oauth2.credentials.Credentials(**creds_dict)
-        service = build('drive', 'v3', credentials=creds)
+        service = build('drive', 'v3', credentials=creds, static_discovery=True)
         token_email = get_user_email(service)
         if token_email != user_email:
             raise ValueError(f"Mismatched credentials for background file processing: {token_email} vs {user_email}")
@@ -1918,7 +1933,7 @@ def run_background_indexing(credentials_dict, user_email, keys_dict):
 
     try:
         creds = google.oauth2.credentials.Credentials(**credentials_dict)
-        service = build('drive', 'v3', credentials=creds)
+        service = build('drive', 'v3', credentials=creds, static_discovery=True)
         token_email = get_user_email(service)
         if token_email != user_email:
             raise ValueError(f"Mismatched credentials for background indexing: {token_email} vs {user_email}")
