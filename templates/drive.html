@@ -3505,8 +3505,10 @@
 
             } catch (err) {
                 typingIndicator.remove();
-                appendPreviewChatBubble('assistant', '❌ Sorry, I couldn't understand your request.Please rephrase your question and try again.Please try again.');
-            }
+appendPreviewChatBubble(
+    'assistant',
+    "❌ Sorry, I couldn't understand your request. Please rephrase your question and try again."
+);            }
         }
 
         function appendPreviewChatBubble(role, content) {
@@ -4185,8 +4187,10 @@
 
             } catch (err) {
                 typingIndicator.remove();
-                appendChatBubble('assistant', '❌ Sorry, I couldn't understand your request.Please rephrase your question and try again.Please try again.');
-            }
+appendPreviewChatBubble(
+    'assistant',
+    "❌ Sorry, I couldn't understand your request. Please rephrase your question and try again."
+);            }
         }
 
         // Confirmation trigger
