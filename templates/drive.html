@@ -2262,10 +2262,7 @@
                     <i class="fas fa-clock"></i>
                     <span>Recent</span>
                 </div>
-                <div class="nav-item" data-view="shared">
-                    <i class="fas fa-users"></i>
-                    <span>Shared with me</span>
-                </div>
+                
                 <div class="nav-item" data-view="trash">
                     <i class="fas fa-trash-alt"></i>
                     <span>Trash</span>
@@ -2363,11 +2360,7 @@
                     <p>Drop files here to upload</p>
                 </div>
 
-                <div class="empty-state">
-                    <i class="fas fa-folder-open"></i>
-                    <p>No files or folders found</p>
-                    <small>Click "New Folder" or "Upload File" to get started</small>
-                </div>
+               
             </div>
         </div>
 
@@ -2413,21 +2406,6 @@
         </div>
     </div>
 
-    <!-- Modals -->
-    <!-- New Folder Modal -->
-    <div id="folderModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <i class="fas fa-folder-plus"></i>
-                <h3>New Folder</h3>
-            </div>
-            <input type="text" id="folderName" placeholder="Folder name" autocomplete="off">
-            <div class="modal-buttons">
-                <button class="cancel" onclick="closeModal('folderModal')">Cancel</button>
-                <button class="confirm" onclick="createFolder()">Create</button>
-            </div>
-        </div>
-    </div>
 
     <!-- New Doc Modal -->
     <div id="docModal" class="modal">
@@ -3962,7 +3940,6 @@ appendPreviewChatBubble(
                     'my-drive': 'My Drive',
                     'starred': 'Starred',
                     'recent': 'Recent',
-                    'shared': 'Shared with me',
                     'trash': 'Trash'
                 };
 

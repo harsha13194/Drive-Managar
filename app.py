@@ -3009,10 +3009,7 @@ def ai_chat():
             logger.info("Executing manual-only Drive Operations routing path")
             
             instructions = {
-                "create folder": "📁 **Create Folder**: To create a folder manually, click the **New Folder** button at the top-left of the sidebar, enter the folder name, and click **Create**.",
-                "create file": "📄 **Create Document**: To create a new document manually, click the **New Doc** button at the top-left of the sidebar, enter a name, and click **Create**. You can also upload existing files.",
                 "delete": "🗑️ **Delete File/Folder**: To delete a file or folder manually, right-click on the item in the list and select **Delete** from the context menu.",
-                "rename": "✏️ **Rename File/Folder**: To rename an item manually, right-click on the item and select **Rename** from the context menu.",
                 "move": "📂 **Move File/Folder**: To move a file or folder manually, right-click on the item, select **Move**, and select the destination folder.",
                 "copy": "📋 **Copy File**: To copy a file manually, right-click on the file and select **Make a Copy**.",
                 "upload": "📤 **Upload File**: To upload a file manually, click the **Upload File** button at the top-left of the sidebar, or simply drag and drop the file into the files grid/list.",
