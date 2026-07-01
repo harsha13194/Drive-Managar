@@ -252,26 +252,7 @@ def rename_file_chunks(user_email, file_id, new_name, new_path):
     finally:
         conn.close()
 
-def move_file_chunks(user_email, file_id, new_path):
-    """Update path for chunks of a moved file"""
-    db_path = get_db_path(user_email)
-    if not os.path.exists(db_path):
-        return
-        
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            UPDATE chunks 
-            SET path = ?
-            WHERE file_id = ?
-        """, (new_path, file_id))
-        conn.commit()
-    except Exception as e:
-        print(f"Error updating moved file chunks: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
+
 
 def update_folder_paths(user_email, old_path_prefix, new_path_prefix):
     """Update paths for chunks inside a folder that was moved or renamed"""
@@ -379,68 +360,5 @@ def semantic_search(user_email, query_embedding, limit=15, file_id=None, file_id
     results.sort(key=lambda x: x[1], reverse=True)
     return results[:limit]
 
-def find_similar_files(user_email, file_id, limit=5):
-    """
-    Find files similar to a given file based on average cosine similarity of their vector chunks.
-    """
-    db_path = get_db_path(user_email)
-    if not os.path.exists(db_path):
-        return []
-    
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    try:
-        # Get embeddings of the target file
-        cursor.execute("SELECT embedding FROM chunks WHERE file_id = ?", (file_id,))
-        target_blobs = cursor.fetchall()
-        if not target_blobs:
-            return []
-        
-        target_embeddings = [deserialize_vector(b[0]) for b in target_blobs if b[0]]
-        if not target_embeddings:
-            return []
-            
-        # Get embeddings and metadata of all other files
-        cursor.execute("SELECT file_id, name, path, embedding FROM chunks WHERE file_id != ?", (file_id,))
-        other_rows = cursor.fetchall()
-    except Exception as e:
-        print(f"Error querying similar files: {e}")
-        return []
-    finally:
-        conn.close()
-        
-    # Group other chunks by file_id
-    from collections import defaultdict
-    other_files = defaultdict(list)
-    file_metadata = {}
-    
-    for fid, name, path, blob in other_rows:
-        emb = deserialize_vector(blob)
-        if emb:
-            other_files[fid].append(emb)
-            file_metadata[fid] = {"name": name, "path": path}
-            
-    # Compute similarity between target file and other files
-    similarities = []
-    for fid, embs in other_files.items():
-        chunk_scores = []
-        for t_emb in target_embeddings:
-            max_score = 0.0
-            for o_emb in embs:
-                score = compute_similarity(t_emb, o_emb)
-                if score > max_score:
-                    max_score = score
-            chunk_scores.append(max_score)
-        
-        avg_similarity = sum(chunk_scores) / len(chunk_scores) if chunk_scores else 0.0
-        if avg_similarity > 0.35: # cosine similarity threshold
-            similarities.append({
-                "id": fid,
-                "name": file_metadata[fid]["name"],
-                "path": file_metadata[fid]["path"],
-                "similarity": round(avg_similarity, 3)
-            })
-            
-    similarities.sort(key=lambda x: x["similarity"], reverse=True)
-    return similarities[:limit]
+
 

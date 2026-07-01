@@ -440,24 +440,7 @@ def get_recent():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/shared')
-def get_shared():
-    """List shared-with-me items"""
-    service = get_drive_service()
-    if not service:
-        return jsonify({"error": "Unauthorized"}), 401
-        
-    try:
-        query = "sharedWithMe = true and trashed = false"
-        results = service.files().list(
-            q=query,
-            fields="files(id, name, mimeType, size, modifiedTime, createdTime, starred, owners, webViewLink, webContentLink)",
-            pageSize=100
-        ).execute()
-        drive_files = results.get('files', [])
-        return jsonify([map_drive_file(f) for f in drive_files])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/trash')
 def get_trash():
@@ -485,124 +468,6 @@ def get_session_email_or_fetch(service):
         session['user_email'] = email
     return email
 
-@app.route('/api/create-folder', methods=['POST'])
-def create_folder():
-    """Create a folder on Google Drive"""
-    data = request.get_json(silent=True) or {}
-    folder_name = (data.get('name') or '').strip()
-    parent_id = data.get('parent_id', 'root')
-
-    if not folder_name:
-        return jsonify({"success": False, "error": "Folder name is required"}), 400
-
-    service = get_drive_service()
-    if not service:
-        return jsonify({"error": "Unauthorized"}), 401
-        
-    try:
-        folder_metadata = {
-            'name': folder_name,
-            'mimeType': 'application/vnd.google-apps.folder'
-        }
-        if parent_id != 'root':
-            folder_metadata['parents'] = [parent_id]
-            
-        new_folder = service.files().create(body=folder_metadata, fields='id, name, webViewLink').execute()
-        
-        # Sync update to index
-        try:
-            user_email = get_session_email_or_fetch(service)
-            parent_path = "/"
-            if parent_id != 'root':
-                index_data = load_json_file(f"drive_index_{sanitize_filename(user_email)}.json", {})
-                parent_meta = index_data.get(parent_id)
-                if parent_meta:
-                    parent_path = parent_meta["path"]
-            folder_path = (parent_path + "/" + folder_name) if parent_path != "/" else ("/" + folder_name)
-            if not folder_path.startswith("/"):
-                folder_path = "/" + folder_path
-
-            file_metadata = {
-                "id": new_folder["id"],
-                "name": folder_name,
-                "mime_type": 'application/vnd.google-apps.folder',
-                "path": folder_path,
-                "parent_id": parent_id,
-                "size": None,
-                "modified_time": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-                "starred": False,
-                "owner": "me",
-                "is_folder": True,
-                "webViewLink": new_folder.get("webViewLink"),
-                "webContentLink": None
-            }
-            update_index_file(user_email, new_folder["id"], file_metadata)
-        except Exception as index_err:
-            print(f"Error syncing folder creation to index: {index_err}")
-            
-        return jsonify({"success": True, "folder": new_folder})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/create-doc', methods=['POST'])
-def create_doc():
-    """Create an empty text file on Google Drive"""
-    data = request.get_json(silent=True) or {}
-    doc_name = (data.get('name') or '').strip() or 'Untitled Document'
-    parent_id = data.get('parent_id', 'root')
-    
-    if not doc_name.endswith('.txt') and '.' not in doc_name:
-        doc_name += '.txt'
-        
-    service = get_drive_service()
-    if not service:
-        return jsonify({"error": "Unauthorized"}), 401
-        
-    try:
-        file_metadata = {
-            'name': doc_name,
-            'mimeType': 'text/plain'
-        }
-        if parent_id != 'root':
-            file_metadata['parents'] = [parent_id]
-            
-        media = MediaIoBaseUpload(io.BytesIO(b''), mimetype='text/plain', resumable=True)
-        new_doc = service.files().create(body=file_metadata, media_body=media, fields='id, name, webViewLink, webContentLink').execute()
-        
-        # Sync update to index
-        try:
-            user_email = get_session_email_or_fetch(service)
-            parent_path = "/"
-            if parent_id != 'root':
-                index_data = load_json_file(f"drive_index_{sanitize_filename(user_email)}.json", {})
-                parent_meta = index_data.get(parent_id)
-                if parent_meta:
-                    parent_path = parent_meta["path"]
-            doc_path = (parent_path + "/" + doc_name) if parent_path != "/" else ("/" + doc_name)
-            if not doc_path.startswith("/"):
-                doc_path = "/" + doc_path
-
-            file_meta = {
-                "id": new_doc["id"],
-                "name": doc_name,
-                "mime_type": 'text/plain',
-                "path": doc_path,
-                "parent_id": parent_id,
-                "size": "0",
-                "modified_time": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-                "starred": False,
-                "owner": "me",
-                "is_folder": False,
-                "webViewLink": new_doc.get("webViewLink"),
-                "webContentLink": new_doc.get("webContentLink")
-            }
-            update_index_file(user_email, new_doc["id"], file_meta, raw_content="")
-        except Exception as index_err:
-            print(f"Error syncing document creation to index: {index_err}")
-            
-        return jsonify({"success": True, "doc": new_doc})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 def verify_file_ownership(service, user_email, file_id, index_data):
     """
@@ -1060,61 +925,7 @@ def get_file_content(file_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/download/<file_id>')
-def download_file(file_id):
-    """Securely download a file from Google Drive, enforcing ownership verification"""
-    service = get_drive_service()
-    if not service:
-        return jsonify({"error": "Unauthorized"}), 401
-    try:
-        user_email = get_session_email_or_fetch(service)
-        if not user_email:
-            return jsonify({"error": "Unauthorized"}), 401
-        sanitized_email = sanitize_filename(user_email)
-        
-        # Enforce strict per-user isolation: file must be in user's index!
-        index_data = load_json_file(f"drive_index_{sanitized_email}.json", {})
-        has_access, file_meta = verify_file_ownership(service, user_email, file_id, index_data)
-        if not has_access:
-            return jsonify({"error": "Forbidden - File ownership verification failed"}), 403
-            
-        meta = service.files().get(fileId=file_id, fields='name, mimeType').execute()
-        mime = meta.get('mimeType', 'application/octet-stream')
-        
-        if mime == 'application/vnd.google-apps.document':
-            # Export Google Doc as PDF
-            request_media = service.files().export_media(fileId=file_id, mimeType='application/pdf')
-            mime = 'application/pdf'
-            filename = meta.get('name', 'document') + '.pdf'
-        elif mime == 'application/vnd.google-apps.spreadsheet':
-            # Export Google Sheet as Excel
-            request_media = service.files().export_media(fileId=file_id, mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            filename = meta.get('name', 'spreadsheet') + '.xlsx'
-        elif mime == 'application/vnd.google-apps.presentation':
-            # Export Google Slide as PPTX
-            request_media = service.files().export_media(fileId=file_id, mimeType='application/vnd.openxmlformats-officedocument.presentationml.presentation')
-            mime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-            filename = meta.get('name', 'presentation') + '.pptx'
-        else:
-            request_media = service.files().get_media(fileId=file_id)
-            filename = meta.get('name', 'file')
-            
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request_media)
-        done = False
-        while not done:
-            _, done = downloader.next_chunk()
-        fh.seek(0)
-        
-        return send_file(
-            fh,
-            mimetype=mime,
-            as_attachment=True,
-            download_name=filename
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+
 
 def save_document_analysis(user_email, file_id, key, value):
     """
@@ -1217,9 +1028,6 @@ def get_file_metadata(file_id):
         # Reading time (words / 200)
         reading_time = max(1, round(word_count / 200)) if word_count > 0 else 0
         
-        # Related documents using vector similarity
-        related_docs = embeddings_db.find_similar_files(user_email, file_id, limit=5)
-        
         # Build metadata dictionary
         result = {
             "id": file_id,
@@ -1239,8 +1047,7 @@ def get_file_metadata(file_id):
             "entities": file_meta.get("entities", ""),
             "topics": file_meta.get("topics", ""),
             "important_points": file_meta.get("important_points", ""),
-            "faq": file_meta.get("faq", ""),
-            "related_documents": related_docs
+            "faq": file_meta.get("faq", "")
         }
         return jsonify(result)
     except Exception as e:
@@ -2213,49 +2020,7 @@ def update_cached_paths_after_rename(user_email, folder_id, old_name, new_name):
     save_json_file(index_file, index_data)
     save_json_file(content_file, content_data)
 
-def update_cached_paths_after_move(user_email, file_id, target_parent_id):
-    sanitized_email = sanitize_filename(user_email)
-    index_file = f"drive_index_{sanitized_email}.json"
-    content_file = f"drive_content_cache_{sanitized_email}.json"
-    
-    index_data = load_json_file(index_file, {})
-    content_data = load_json_file(content_file, {})
-    
-    item = index_data.get(file_id)
-    parent = index_data.get(target_parent_id) if target_parent_id != 'root' else None
-    
-    if not item:
-        return
-        
-    old_path = item["path"]
-    parent_path = parent["path"] if parent else ""
-    new_path = parent_path + "/" + item["name"]
-    if not new_path.startswith("/"):
-        new_path = "/" + new_path
-        
-    item["parent_id"] = target_parent_id
-    item["path"] = new_path
-    
-    if item.get("is_folder", False):
-        prefix = old_path + "/"
-        for f_id, f_meta in index_data.items():
-            if f_meta["path"].startswith(prefix):
-                suffix = f_meta["path"][len(prefix):]
-                f_meta["path"] = new_path + "/" + suffix
-                if f_id in content_data:
-                    content_data[f_id]["path"] = f_meta["path"]
-                    
-        # Sync folder children paths in vector store
-        embeddings_db.update_folder_paths(user_email, old_path, new_path)
-    else:
-        # Sync file move in vector store
-        embeddings_db.move_file_chunks(user_email, file_id, new_path)
-                    
-    if file_id in content_data:
-        content_data[file_id]["path"] = new_path
-        
-    save_json_file(index_file, index_data)
-    save_json_file(content_file, content_data)
+
 
 def compute_tfidf_relevance(query, documents):
     def tokenize(text):
@@ -2934,59 +2699,7 @@ def ai_chat():
                 msg = "❌ Invalid API Key format."
                 return jsonify({"response": msg, "history": get_updated_history("assistant", msg)})
      
-        # 2. Check pending confirmation actions
-        pending = session.get('pending_action')
-        if pending:
-            is_positive = msg_lower in ['yes', 'y', 'confirm', 'ok', 'go ahead', 'true'] or data.get('confirm') == True
-            is_negative = msg_lower in ['no', 'n', 'cancel', 'false'] or data.get('confirm') == False
-            
-            if is_positive:
-                action = pending['action']
-                file_id = pending['file_id']
-                file_name = pending['file_name']
-                
-                try:
-                    if action == 'delete':
-                        service.files().update(fileId=file_id, body={'trashed': True}).execute()
-                        remove_from_index(user_email, file_id)
-                        session.pop('pending_action', None)
-                        session.modified = True
-                        resp = f"🗑️ File `{file_name}` has been successfully moved to Trash."
-                        return jsonify({"response": resp, "history": get_updated_history("assistant", resp)})
-                        
-                    elif action == 'move':
-                        target_folder_id = pending['target_folder_id']
-                        target_folder_name = pending['target_folder_name']
-                        
-                        f = service.files().get(fileId=file_id, fields='parents').execute()
-                        prev_parents = ",".join(f.get('parents', []))
-                        
-                        service.files().update(
-                            fileId=file_id,
-                            addParents=target_folder_id,
-                            removeParents=prev_parents
-                        ).execute()
-                        
-                        update_cached_paths_after_move(user_email, file_id, target_folder_id)
-                        session.pop('pending_action', None)
-                        session.modified = True
-                        resp = f"📁 Moved `{file_name}` into `{target_folder_name}` successfully."
-                        return jsonify({"response": resp, "history": get_updated_history("assistant", resp)})
-                except Exception as ex:
-                    session.pop('pending_action', None)
-                    session.modified = True
-                    resp = f"❌ Failed to execute action: {ex}"
-                    return jsonify({"response": resp, "history": get_updated_history("assistant", resp)})
-                    
-            elif is_negative:
-                session.pop('pending_action', None)
-                session.modified = True
-                resp = "❌ Action canceled."
-                return jsonify({"response": resp, "history": get_updated_history("assistant", resp)})
-            else:
-                resp = f"Please confirm: Type **yes** or **no** to proceed with: *{pending['action']} {pending['file_name']}*"
-                return jsonify({"response": resp, "history": history, "ask_confirmation": True})
-     
+
         # Get active key and provider
         nvidia_key = session.get('nvidia_api_key') or os.environ.get('NVIDIA_API_KEY') or DEFAULT_NVIDIA_API_KEY
         provider = 'nvidia'
@@ -3101,7 +2814,7 @@ def ai_chat():
                 logger.exception("Document Analysis Failure")
                 return jsonify({
                     "success": True,
-                    "response": "AI service is temporarily unavailable.",
+                    "response": "AI service is temporarily unavailable or Try Again ",
                     "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
                 })
                 
@@ -3217,7 +2930,7 @@ def ai_chat():
                 logger.exception("LLM Failure")
                 return jsonify({
                     "success": True,
-                    "response": "AI service is temporarily unavailable.",
+                    "response": "AI service is temporarily unavailable. or Try Again ",
                     "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
                 })
                 
@@ -3276,7 +2989,7 @@ def ai_chat():
                 logger.exception("LLM Failure")
                 return jsonify({
                     "success": True,
-                    "response": "AI service is temporarily unavailable.",
+                    "response": "AI service is temporarily unavailable or Try Again ",
                     "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
                 })
                 
@@ -3300,9 +3013,9 @@ def ai_chat():
         logger.exception("AI Chat Fatal Error")
         return jsonify({
             "success": True,
-            "response": "AI service is temporarily unavailable."
+            "response": "AI service is temporarily unavailable or Try Again"
         })
-    
+     
 
 
 if __name__ == '__main__':

@@ -1609,66 +1609,7 @@
             display: none;
         }
 
-        /* Sidebar Tabs */
-        .sidebar-tabs {
-            display: flex;
-            background: var(--bg-primary);
-            padding: 2px;
-            border-radius: 10px;
-            border: 1px solid var(--border-color);
-            margin-bottom: 12px;
-            flex-shrink: 0;
-            gap: 2px;
-        }
 
-        .sidebar-tab {
-            flex: 1;
-            text-align: center;
-            padding: 8px 12px;
-            cursor: pointer;
-            font-size: 12.5px;
-            font-weight: 600;
-            color: var(--text-secondary);
-            border-radius: 8px;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-
-        .sidebar-tab.active {
-            background: var(--bg-secondary);
-            color: var(--accent-color);
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-        }
-
-        /* Sidebar Panes */
-        .sidebar-pane {
-            display: none;
-            flex-direction: column;
-            flex: 1;
-            min-height: 0;
-        }
-
-        .sidebar-pane.active {
-            display: flex;
-        }
-
-        /* Metadata & Info Panel */
-        .info-grid {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 8px 16px;
-            font-size: 13px;
-            margin-bottom: 16px;
-            background: var(--bg-primary);
-            padding: 14px;
-            border-radius: 12px;
-            border: 1px solid var(--border-color);
-            max-height: 300px;
-            overflow-y: auto;
-        }
 
         .info-label {
             color: var(--text-secondary);
@@ -2323,7 +2264,6 @@
             <!-- Action Buttons & Toolbar -->
             <div class="action-buttons" id="actionButtons">
                 <div class="btn-group">
-                    <button class="action-btn" id="newFolderBtn"><i class="fas fa-folder-plus"></i> New Folder</button>
                     <button class="action-btn primary" id="uploadBtn"><i class="fas fa-upload"></i> Upload File</button>
                 </div>
                 <div class="btn-group" id="trashActions" style="display: none;">
@@ -2406,21 +2346,6 @@
         </div>
     </div>
 
-
-    <!-- New Doc Modal -->
-    <div id="docModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <i class="fas fa-file-alt"></i>
-                <h3>New Document</h3>
-            </div>
-            <input type="text" id="docName" placeholder="Document name" autocomplete="off" value="Untitled">
-            <div class="modal-buttons">
-                <button class="cancel" onclick="closeModal('docModal')">Cancel</button>
-                <button class="confirm" onclick="createDocument()">Create</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Rename Modal -->
     <div id="renameModal" class="modal">
@@ -2824,7 +2749,7 @@
                 emptyDiv.innerHTML = `
                 <i class="fas fa-folder-open"></i>
                 <p>No files or folders found</p>
-                <small>${currentView === 'trash' ? 'Trash is empty' : 'Click "New Folder" or "Upload File" to get started'}</small>
+                <small>${currentView === 'trash' ? 'Trash is empty' : 'Click "Upload File" to get started'}</small>
             `;
                 container.appendChild(emptyDiv);
                 return;
@@ -3113,52 +3038,7 @@
             }
         }
 
-        // Create folder action
-        async function createFolder() {
-            const name = document.getElementById('folderName').value.trim();
-            if (!name) {
-                showToast('Please enter a folder name', 'error');
-                return;
-            }
 
-            try {
-                const res = await fetch('/api/create-folder', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name, parent_id: currentFolderId })
-                });
-                if (res.ok) {
-                    closeModal('folderModal');
-                    document.getElementById('folderName').value = '';
-                    fetchFiles();
-                    showToast(`Folder "${name}" created`, 'success');
-                }
-            } catch (err) {
-                showToast('Error creating folder', 'error');
-            }
-        }
-
-        // Create document action
-        async function createDocument() {
-            let name = document.getElementById('docName').value.trim();
-            if (!name) name = 'Untitled';
-
-            try {
-                const res = await fetch('/api/create-doc', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name, parent_id: currentFolderId })
-                });
-                if (res.ok) {
-                    closeModal('docModal');
-                    document.getElementById('docName').value = 'Untitled';
-                    fetchFiles();
-                    showToast(`Document "${name}" created`, 'success');
-                }
-            } catch (err) {
-                showToast('Error creating document', 'error');
-            }
-        }
 
         // Upload file
         async function uploadFile(file) {
@@ -3286,24 +3166,7 @@
             sidebar.classList.toggle('collapsed');
         }
 
-        function switchSidebarTab(tab) {
-            const tabAi = document.getElementById('sidebarTabAi');
-            const tabInfo = document.getElementById('sidebarTabInfo');
-            const paneAi = document.getElementById('sidebarPaneAi');
-            const paneInfo = document.getElementById('sidebarPaneInfo');
 
-            if (tab === 'ai') {
-                tabAi.classList.add('active');
-                tabInfo.classList.remove('active');
-                paneAi.classList.add('active');
-                paneInfo.classList.remove('active');
-            } else {
-                tabInfo.classList.add('active');
-                tabAi.classList.remove('active');
-                paneInfo.classList.add('active');
-                paneAi.classList.remove('active');
-            }
-        }
 
         function toggleSummaryCardExpand() {
             const card = document.getElementById('previewSummaryCard');
@@ -3375,35 +3238,6 @@
                 if (!res.ok) return;
                 const data = await res.json();
 
-                const infoGrid = document.getElementById('previewInfoGrid');
-                if (infoGrid) {
-                    infoGrid.innerHTML = `
-                    <div class="info-label">Name:</div>
-                    <div class="info-value" style="font-size:11.5px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${escapeHtml(data.name)}">${escapeHtml(data.name)}</div>
-                    
-                    <div class="info-label">Type:</div>
-                    <div class="info-value">${escapeHtml(data.mime_type.split('/').pop().toUpperCase())}</div>
-                    
-                    <div class="info-label">Size:</div>
-                    <div class="info-value">${data.size_str}</div>
-                    
-                    <div class="info-label">Words:</div>
-                    <div class="info-value">${data.word_count.toLocaleString()}</div>
-                    
-                    <div class="info-label">Read Time:</div>
-                    <div class="info-value">${data.reading_time} min</div>
-                    
-                    <div class="info-label">Last Modified:</div>
-                    <div class="info-value">${escapeHtml(data.modified_time.split('T')[0])}</div>
-                    
-                    <div class="info-label">Embedding:</div>
-                    <div class="info-value">${data.embedding_status}</div>
-                    
-                    <div class="info-label">Chunks:</div>
-                    <div class="info-value">${data.chunks_count}</div>
-                `;
-                }
-
                 const summaryCard = document.getElementById('previewSummaryCard');
                 const summaryContent = document.getElementById('previewSummaryContent');
                 if (data.summary) {
@@ -3411,37 +3245,6 @@
                     summaryContent.innerHTML = formatMarkdown(data.summary);
                 } else {
                     summaryCard.style.display = 'none';
-                }
-
-                const relatedList = document.getElementById('previewRelatedList');
-                const relatedTitle = document.getElementById('relatedDocsTitle');
-                if (relatedList) {
-                    relatedList.innerHTML = '';
-                    if (data.related_documents && data.related_documents.length > 0) {
-                        if (relatedTitle) relatedTitle.style.display = 'block';
-                        for (const doc of data.related_documents) {
-                            const div = document.createElement('div');
-                            div.className = 'related-item';
-                            div.onclick = () => {
-                                closeModal('previewModal');
-                                setTimeout(() => openPreview(doc.id), 200);
-                            };
-                            div.innerHTML = `
-                            <i class="fas fa-file-alt"></i>
-                            <div class="related-item-info">
-                                <div class="related-name" title="${escapeHtml(doc.name)}">${escapeHtml(doc.name)}</div>
-                                <div class="related-meta">
-                                    <span>Similarity</span>
-                                    <span>${Math.round(doc.similarity * 100)}%</span>
-                                </div>
-                            </div>
-                        `;
-                            relatedList.appendChild(div);
-                        }
-                    } else {
-                        if (relatedTitle) relatedTitle.style.display = 'none';
-                        relatedList.innerHTML = '<div style="font-size:12px; color:var(--text-secondary); text-align:center; padding:10px;">No related documents found.</div>';
-                    }
                 }
             } catch (err) {
                 console.error('Error fetching file metadata', err);
@@ -3972,7 +3775,6 @@ appendPreviewChatBubble(
         });
 
         // Control bar triggers
-        document.getElementById('newFolderBtn').onclick = () => openModal('folderModal');
         document.getElementById('uploadBtn').onclick = () => document.getElementById('fileInput').click();
         document.getElementById('emptyTrashBtn').onclick = () => emptyTrash();
 
