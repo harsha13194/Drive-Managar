@@ -2166,19 +2166,75 @@
         }
     </script>
     <div class="login-overlay"
-        style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #0f172a, #1e293b); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+        style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #f3f4f6; z-index: 10000; display: flex; align-items: center; justify-content: center; overflow-y: auto; padding: 40px 20px; box-sizing: border-box;">
         <div class="login-card"
-            style="background: rgba(30, 41, 59, 0.75); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border: 1px solid rgba(255,255,255,0.08); border-radius: 28px; padding: 48px; width: 440px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); color: #f8fafc; animation: modalPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 28px; padding: 48px; width: 500px; max-width: 100%; text-align: center; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.03); color: #1f2937; animation: modalPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); box-sizing: border-box; margin: auto;">
             <div style="font-size: 72px; margin-bottom: 20px; line-height: 1;">📂</div>
-            <h2 style="font-size: 26px; font-weight: 700; margin-bottom: 12px; letter-spacing: -0.5px;">Drive Manager
-            </h2>
-            <p style="font-size: 14px; color: #94a3b8; margin-bottom: 32px; line-height: 1.6;">A premium, modern
-                interface for your cloud assets. Connect securely using Google OAuth to manage files, edit documents,
-                and track storage.</p>
+            <h2 style="font-size: 28px; font-weight: 700; color: #111827; margin-bottom: 12px; letter-spacing: -0.5px;">Drive Manager</h2>
+            <p style="font-size: 14px; color: #4b5563; margin-bottom: 32px; line-height: 1.6; max-width: 380px; margin-left: auto; margin-right: auto;">
+                A premium, modern interface for your cloud assets. Connect securely using Google OAuth to manage files, edit documents, and track storage.
+            </p>
             <a href="/login" class="action-btn primary"
-                style="display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; padding: 14px 28px; font-size: 15px; font-weight: 600; border-radius: 30px; background: #2563eb; color: white; transition: all 0.2s; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); width: 100%;">
-                <i class="fab fa-google"></i> Connect Google Drive
+                style="display: flex; align-items: center; justify-content: center; gap: 12px; text-decoration: none; padding: 12px 24px; font-size: 15px; font-weight: 600; border-radius: 30px; background: #2b5b94; color: white; transition: all 0.2s; border: 1px solid #2b5b94; box-shadow: 0 0 0 4px rgba(43, 91, 148, 0.15); width: 100%; box-sizing: border-box; margin-bottom: 32px;">
+                <span style="display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: white; border-radius: 50%; flex-shrink: 0;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.22-.66-.35-1.36-.35-2.09z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+                    </svg>
+                </span>
+                <span>Connect Google Drive</span>
             </a>
+
+            <!-- Developer Preview Section -->
+            <div class="developer-preview-box" style="padding: 24px; background: #f5f4ed; border: 1px solid #dcdad0; border-radius: 16px; text-align: left; box-sizing: border-box;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                    <span style="color: #b45309; font-size: 16px; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: #fef3c7; border: 1px solid #fde68a; flex-shrink: 0;"><i class="fas fa-shield-alt"></i></span>
+                    <h3 style="font-size: 16px; font-weight: 700; color: #b45309; margin: 0; letter-spacing: -0.2px;">Developer Preview</h3>
+                </div>
+                
+                <p style="font-size: 13px; color: #27272a; margin: 0 0 12px 0; line-height: 1.6;">
+                    This application is currently in testing and is awaiting Google verification. During sign-in, Google may display a warning indicating that the app has not been verified.
+                </p>
+                <p style="font-size: 13px; color: #27272a; margin: 0; line-height: 1.6;">
+                    This warning is expected for applications in development and does not indicate that the application is unsafe.
+                </p>
+                
+                <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;">
+                
+                <h4 style="font-size: 13px; font-weight: 700; color: #18181b; margin: 0 0 16px 0; letter-spacing: -0.1px;">To continue:</h4>
+                
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid #a1a1aa; background: #fff; color: #27272a; font-size: 11px; font-weight: 600; flex-shrink: 0;"><i class="fas fa-link" style="font-size: 10px;"></i></span>
+                        <span style="font-size: 13px; color: #27272a; line-height: 1.5;">Click Connect Google Drive</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid #a1a1aa; background: #fff; color: #27272a; font-size: 11px; font-weight: 600; flex-shrink: 0;"><i class="fas fa-cog" style="font-size: 10px;"></i></span>
+                        <span style="font-size: 13px; color: #27272a; line-height: 1.5;">Click Advanced</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid #a1a1aa; background: #fff; color: #27272a; font-size: 11px; font-weight: 600; flex-shrink: 0;"><i class="fas fa-mouse-pointer" style="font-size: 10px;"></i></span>
+                        <span style="font-size: 13px; color: #27272a; line-height: 1.5;">Select <span style="color: #b45309; font-weight: 600;">Go to Drive Manager (unsafe)</span></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid #a1a1aa; background: #fff; color: #27272a; font-size: 11px; font-weight: 600; flex-shrink: 0;"><i class="fas fa-user" style="font-size: 10px;"></i></span>
+                        <span style="font-size: 13px; color: #27272a; line-height: 1.5;">Sign in with your Google account</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid #a1a1aa; background: #fff; color: #27272a; font-size: 11px; font-weight: 600; flex-shrink: 0;"><i class="fas fa-key" style="font-size: 10px;"></i></span>
+                        <span style="font-size: 13px; color: #27272a; line-height: 1.5;">Grant the requested permissions</span>
+                    </div>
+                </div>
+                
+                <hr style="border: 0; border-top: 1px solid #e4e4e7; margin: 20px 0;">
+                
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <span style="color: #52525b; font-size: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;"><i class="fas fa-lock"></i></span>
+                    <span style="font-size: 12px; color: #52525b; line-height: 1.5;">Your data is secure. We never store your Google account credentials. Authentication is handled securely by Google.</span>
+                </div>
+            </div>
         </div>
     </div>
     {% endif %}
