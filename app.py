@@ -2814,8 +2814,8 @@ def ai_chat():
                 logger.exception("Document Analysis Failure")
                 return jsonify({
                     "success": True,
-                    "response": "AI service is temporarily unavailable or Try Again ",
-                    "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
+                    "response": "Please ask your question again. or Try Again ",
+                    "history": get_updated_history("assistant", "Please ask your question again..")
                 })
                 
         # Route 3: Document Q&A
@@ -2930,8 +2930,8 @@ def ai_chat():
                 logger.exception("LLM Failure")
                 return jsonify({
                     "success": True,
-                    "response": "AI service is temporarily unavailable. or Try Again ",
-                    "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
+                    "response": "Please ask your question again.. or Try Again ",
+                    "history": get_updated_history("assistant", "Please ask your question again..")
                 })
                 
         # Route 4: General AI Chat
@@ -2989,8 +2989,8 @@ def ai_chat():
                 logger.exception("LLM Failure")
                 return jsonify({
                     "success": True,
-                    "response": "AI service is temporarily unavailable or Try Again ",
-                    "history": get_updated_history("assistant", "AI service is temporarily unavailable.")
+                    "response": "Please ask your question again. or Try Again ",
+                    "history": get_updated_history("assistant", "Please ask your question again..")
                 })
                 
         # Default chatbot help message fallback
@@ -3013,7 +3013,7 @@ def ai_chat():
         logger.exception("AI Chat Fatal Error")
         return jsonify({
             "success": True,
-            "response": "AI service is temporarily unavailable or Try Again"
+            "response": "Please ask your question again. or Try Again"
         })
      
 
