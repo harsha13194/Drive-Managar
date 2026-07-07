@@ -2558,10 +2558,7 @@
                         style="padding: 8px 14px; font-size:12.5px; margin:0; height:34px; display: none;">
                         <i class="fas fa-copy"></i> Copy Text
                     </button>
-                    <a id="previewDownloadBtn" href="#" download class="action-btn"
-                        style="text-decoration: none; padding: 8px 14px; font-size:12.5px; margin: 0; display: inline-flex; align-items: center; gap: 6px; height: 34px;">
-                        <i class="fas fa-download"></i> Download
-                    </a>
+
                     <a id="previewOpenOnlineBtn" href="#" target="_blank" class="action-btn"
                         style="text-decoration: none; display: none; align-items: center; gap: 6px; margin: 0; padding: 8px 14px; font-size:12.5px; height: 34px;">
                         <i class="fas fa-external-link-alt"></i> Open in Drive
@@ -3405,7 +3402,6 @@ appendPreviewChatBubble(
             const title = document.getElementById('previewTitle');
             const icon = document.getElementById('previewIcon');
             const openOnlineBtn = document.getElementById('previewOpenOnlineBtn');
-            const downloadBtn = document.getElementById('previewDownloadBtn');
 
             title.textContent = file.name;
             icon.className = `fas ${file.icon || 'fa-file'}`;
@@ -3416,9 +3412,6 @@ appendPreviewChatBubble(
             } else {
                 openOnlineBtn.style.display = 'none';
             }
-
-            downloadBtn.href = `/api/file-content/${fileId}`;
-            downloadBtn.download = file.name;
 
             let iconColor = 'var(--accent-color)';
             const iconName = file.icon || '';
